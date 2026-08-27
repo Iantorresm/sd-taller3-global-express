@@ -1,74 +1,23 @@
+# Global Express (GlobalTrack) - Sistema de Logística y Envíos
 
-# Descargar el código fuente
+Este repositorio contiene el sistema backend de Global Express, encargado de administrar la trazabilidad de los envíos, recibir solicitudes de registro de entrega por parte de las ópticas asociadas y actualizar los estados de los paquetes.
 
-  - Ubicación del proyecto: https://gitlab.com/fmancia/sd/tree/master/lab-socket/ProyectoJava
+## Tecnologías Utilizadas
 
-  - Clonar Proyecto
-      `git clone git@gitlab.com:fmancia/sd.git`
- ó bien
-      `git clone https://gitlab.com/fmancia/sd.git`
+* **Java** (JDK 11+)
+* **PostgreSQL** (Base de datos relacional)
+* **Maven** (Gestión de dependencias)
+* **json-simple** (Serialización y deserialización de JSON)
 
-  - Verificar que el directorio dentro de su disco: /lab-socket/ProyectoJava  (En ese directorio se encuentra la práctica de sockets tcp/upd)
+## Estructura del Proyecto
 
+* `py.una.entidad`: Clases de dominio (`Envio`) y sus conversores JSON (`EnvioJSON`).
+* `py.una.bd`: Capa de persistencia (`EnvioDAO`, `Bd`) y pruebas unitarias (`TestEnvioDAO`).
+* `py.una.server.tcp` / `udp`: Implementación de sockets para atención a clientes externos (ópticas).
 
-# Instalar software base
+## Configuración y Ejecución
 
-  - 1. Instalar servidor de base de datos PostgreSQL: https://www.postgresql.org/
-
-  - 2. Instalar el JDK de Java (para esta práctica es JDK1.8 o JDK8). https://www.oracle.com/java/technologies/downloads/#java8
-  
-    - 2.1. Asegurarse que este configurado la variable de entorno PATH con la carpeta "bin" correspondiente al JDK (no al JRE).
-
-    - 2.2. Asegurarse que este configurado la variable de entorno JAVA_HOME apuntando a la carpeta de JDK sin incluir la subcarpeta "bin". Ej: 
-
-
-  - 3. Instalar Maven: https://maven.apache.org/install.html 
-
-    - 3.1. Asegurarse que este configurado la variable de entorno PATH con la carpeta correspondiente a maven.
-
-  - 4. Instalar un IDE, Ejemplo: Visual Studio Code, Eclipse, etc
-
-
-# Base de datos
-
-  - Deberá crear una base de datos Postgresql con llamada “sd”
-  - Deberá crear estructura cuyo script de creación está en el repositorio en el
-directorio: “BaseDatos”.
-  - Deberá configurar en la clase py.una.bd.Bd.java lo siguiente:
-      - IP, puerto y nombre de la BD (variable url)
-      - Usuario y Password del postgresql (variables user y password)
-
-
-# UDP, Protocolo de Datagramas de Usuario (datagramas)
-◦ Servidor UDP
-▪ Ejecutar Clase servidor py.una.server.udp.UDPServer (Puede ejecutar en una
-consola aparte o desde el IDE)
-▪ Solo puede ejecutar uno a la vez.
-▪ Intente ejecutar y se generará un error similar a java.net.BindException:
-Address already in use: Cannot bind
-◦ Cliente UDP
-▪ Ejecutar Clase servidor py.una.server.udp.UDPClient (Puede ejecutar en una
-consola aparte o desde el IDE)
-▪ Puede Ejecutar varios clientes en simultáneo.
-
-# TCP, Protocolo de Control de Transmisión (flujo)
-◦ Servidor TCP, Una petición de un solo cliente.
-◦ Servidor TCP, Varias peticiones de un solo cliente.
-◦ Servidor TCP, Varias peticiones de varios clientes (Multi-hilo)
-
-
-# Verificación con comando netstat:
- - Windows:
-
-`netstat -a -b -p udp` 
-
-`netstat -a -b -p tcp`
- - Unix/Linux:
-
-`netstat -upnl`
-
-`netstat -tpnl`
-
-
-
-Fuente: https://grado.pol.una.py/pluginfile.php/286807/mod_resource/content/1/LAB-01_SOCKETS.pdf
+1. Configura la conexión a tu base de datos PostgreSQL local en el archivo de configuración de conexión (`Bd.java`).
+2. Ejecuta el script SQL correspondiente para crear la tabla `envio`.
+3. Valida la persistencia ejecutando las pruebas unitarias (`TestEnvioDAO`).
+4. Inicia los servidores de red (`UDPServer`, `TCPServer`) para empezar a recibir peticiones de los sistemas cliente.
