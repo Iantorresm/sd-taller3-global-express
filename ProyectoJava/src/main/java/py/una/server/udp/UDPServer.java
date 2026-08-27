@@ -1,87 +1,69 @@
 package py.una.server.udp;
 
-import java.io.*;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 
-import py.una.bd.PersonaDAO;
-import py.una.entidad.Persona;
-import py.una.entidad.PersonaJSON;
+import py.una.entidad.Envio;
+import py.una.bd.EnvioDAO;
+import py.una.entidad.EnvioJSON;
 
 public class UDPServer {
-	
-	
-    public static void main(String[] a){
-        
-        // Variables
-        int puertoServidor = 9876;
-        PersonaDAO pdao = new PersonaDAO();
-        
-        try {
-            //1) Creamos el socket Servidor de Datagramas (UDP)
-            DatagramSocket serverSocket = new DatagramSocket(puertoServidor);
-			System.out.println("Servidor Sistemas Distribuidos - UDP ");
-			
-            //2) buffer de datos a enviar y recibir
-            byte[] receiveData = new byte[1024];
-            byte[] sendData = new byte[1024];
 
-			
-            //3) Servidor siempre esperando
+    public static void main(String[] args) {
+        int puerto = 9876;
+
+        // El try-with-resources garantiza que serverSocket.close() se llame
+        // automáticamente
+        try (DatagramSocket serverSocket = new DatagramSocket(puerto)) {
+            System.out.println("Servidor UDP GlobalTrack escuchando en el puerto " + puerto + "...");
+
+            // Instanciamos el DAO para consultar la base de datos local de Global Express
+            EnvioDAO envioDao = new EnvioDAO();
+
             while (true) {
+                byte[] receiveData = new byte[1024];
 
-                receiveData = new byte[1024];
-
-                DatagramPacket receivePacket =
-                        new DatagramPacket(receiveData, receiveData.length);
-
-
-                System.out.println("Esperando a algun cliente... ");
-
-                // 4) Receive LLAMADA BLOQUEANTE
+                // 1. Recibir la petición
+                DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 serverSocket.receive(receivePacket);
-				
-				System.out.println("________________________________________________");
-                System.out.println("Aceptamos un paquete");
 
-                // Datos recibidos e Identificamos quien nos envio
-                String datoRecibido = new String(receivePacket.getData());
-                datoRecibido = datoRecibido.trim();
-                System.out.println("DatoRecibido: " + datoRecibido );
-                Persona p = PersonaJSON.stringObjeto(datoRecibido);
+                String datoRecibido = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                System.out.println("\n[GlobalTrack] Consulta recibida: " + datoRecibido);
 
-                InetAddress IPAddress = receivePacket.getAddress();
-
-                int port = receivePacket.getPort();
-
-                System.out.println("De : " + IPAddress + ":" + port);
-                System.out.println("Persona Recibida : " + p.getCedula() + ", " + p.getNombre() + " " + p.getApellido());
-                
                 try {
-                	pdao.insertar(p);
-                	System.out.println("Persona insertada exitosamente en la Base de datos");
-                }catch(Exception e) {
-                	System.out.println("Persona NO insertada en la Base de datos, razón: " + e.getLocalizedMessage());
+                    // 2. Convertir el JSON entrante
+                    Envio peticion = EnvioJSON.stringObjeto(datoRecibido);
+
+                    // 3. Buscar en la BD
+                    Envio envioBD = envioDao.buscarPorId(peticion.getIdEnvio());
+
+                    String respuestaJSON;
+                    if (envioBD != null) {
+                        respuestaJSON = EnvioJSON.objetoString(envioBD);
+                        System.out.println("[GlobalTrack] Envío encontrado. Estado: " + envioBD.getEstado());
+                    } else {
+                        peticion.setEstado("NO_ENCONTRADO");
+                        respuestaJSON = EnvioJSON.objetoString(peticion);
+                        System.out.println("[GlobalTrack] Envío " + peticion.getIdEnvio() + " no encontrado.");
+                    }
+
+                    // 4. Enviar la respuesta
+                    byte[] sendData = respuestaJSON.getBytes();
+                    InetAddress ipOrigen = receivePacket.getAddress();
+                    int puertoOrigen = receivePacket.getPort();
+
+                    DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipOrigen, puertoOrigen);
+                    serverSocket.send(sendPacket);
+
+                    System.out.println("[GlobalTrack] Respuesta enviada.");
+
+                } catch (Exception e) {
+                    System.err.println("Error procesando el JSON interno: " + e.getMessage());
                 }
-                
-                // Respondemos agregando a la persona una asignatura
-                p.getAsignaturas().add("Algoritmos y Estructuras de datos 2");
-                p.getAsignaturas().add("Redes de Computadoras 2");
-
-                // Enviamos la respuesta inmediatamente a ese mismo cliente
-                // Es no bloqueante
-                sendData = PersonaJSON.objetoString(p).getBytes();
-                DatagramPacket sendPacket =
-                        new DatagramPacket(sendData, sendData.length, IPAddress,port);
-
-                serverSocket.send(sendPacket);
-
             }
-
         } catch (Exception ex) {
-        	ex.printStackTrace();
-            System.exit(1);
+            System.err.println("Error crítico en el puerto " + puerto + ": " + ex.getMessage());
         }
-
     }
-}  
-
+}

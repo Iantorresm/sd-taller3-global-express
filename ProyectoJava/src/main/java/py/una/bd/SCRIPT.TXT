@@ -1,0 +1,10 @@
+-- Ejecutar en la base de datos de Global Express
+CREATE TABLE envio (
+    id_envio SERIAL PRIMARY KEY,
+    id_pedido INTEGER NOT NULL,
+    descripcion_producto VARCHAR(255),
+    receptor VARCHAR(100),
+    direccion VARCHAR(255),
+    contacto VARCHAR(50),
+    estado VARCHAR(50) NOT NULL
+);
