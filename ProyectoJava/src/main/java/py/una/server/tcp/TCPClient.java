@@ -37,8 +37,8 @@ public class TCPClient {
             String respuesta = in.readLine();
             System.out.println("[Global Express] Respuesta de Prolens: " + respuesta);
 
-            // Opcional: Actualizar el estado también en la base local usando
-            // EnvioDAO.actualizarEstado()
+            EnvioDAO envioDao = new EnvioDAO();
+            envioDao.actualizarEstado(idPedidoAsociado, nuevoEstado);
             // 3. Leer la confirmación de Prolens
             System.out.println("[Global Express] Respuesta de Prolens: " + respuesta);
 
