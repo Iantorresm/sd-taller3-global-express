@@ -53,4 +53,17 @@ public class EnvioDAO {
 		}
 		return envio;
 	}
+	
+	public void actualizarEstado(Integer idEnvio, String nuevoEstado) {
+		String sql = "UPDATE envio SET estado = ? WHERE id_envio = ?";
+		try (Connection conn = Bd.connect();
+				PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+			pstmt.setString(1, nuevoEstado);
+			pstmt.setInt(2, idEnvio);
+			pstmt.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
 }
