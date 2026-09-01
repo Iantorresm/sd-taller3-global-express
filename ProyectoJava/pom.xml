@@ -4,8 +4,8 @@
     <modelVersion>4.0.0</modelVersion>
 
 
-    <groupId>py.una.pol.sd</groupId>
-    <artifactId>socket</artifactId>
+    <groupId>py.una.pol.sd.globalexpress</groupId>
+    <artifactId>global-express</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
     <properties>
