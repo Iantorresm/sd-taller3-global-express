@@ -4,7 +4,7 @@ Este repositorio contiene el sistema backend de Global Express, encargado de adm
 
 ## Tecnologías Utilizadas
 
-* **Java 8** (JDK 1.8+)
+* **Java** (JDK 11+)
 * **PostgreSQL** (Base de datos relacional)
 * **Maven** (Gestión de dependencias)
 * **json-simple** (Serialización y deserialización de JSON)

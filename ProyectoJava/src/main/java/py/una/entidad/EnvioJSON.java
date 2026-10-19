@@ -7,7 +7,6 @@ import org.json.simple.parser.ParseException;
 public class EnvioJSON {
 
     // Convierte un objeto Envio a un String en formato JSON
-    @SuppressWarnings("unchecked")
     public static String objetoString(Envio envio) {
         JSONObject obj = new JSONObject();
         obj.put("idEnvio", envio.getIdEnvio());
