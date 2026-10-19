@@ -2,7 +2,10 @@ package py.una.server.udp;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.util.LinkedList;
+import java.util.Queue;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 
 import py.una.entidad.Envio;
 import py.una.bd.EnvioDAO;
@@ -10,60 +13,116 @@ import py.una.entidad.EnvioJSON;
 
 public class UDPServer {
 
+    public static class BlockingQueue<T> {
+        private Queue<T> queue = new LinkedList<T>();
+        private int capacity;
+
+        public BlockingQueue(int capacity) {
+            this.capacity = capacity;
+        }
+
+        public synchronized void put(T element) throws InterruptedException {
+            long startTime = System.nanoTime();
+            while (queue.size() == capacity) {
+                wait();
+            }
+            queue.add(element);
+            long endTime = System.nanoTime();
+            double waitTimeMs = (endTime - startTime) / 1_000_000.0;
+            System.out.printf("[Productor UDP] Tiempo PUT: %.3f ms\n", waitTimeMs);
+            notify();
+        }
+
+        public synchronized T take() throws InterruptedException {
+            long startTime = System.nanoTime();
+            while (queue.isEmpty()) {
+                wait();
+            }
+            T item = queue.remove();
+            notify();
+            long endTime = System.nanoTime();
+            double waitTimeMs = (endTime - startTime) / 1_000_000.0;
+            System.out.printf("\t[Consumidor UDP %s] Tiempo TAKE: %.3f ms\n", Thread.currentThread().getName(),
+                    waitTimeMs);
+            return item;
+        }
+    }
+
+    static class UDPWorker extends Thread {
+        private BlockingQueue<DatagramPacket> queue;
+        private DatagramSocket socket;
+        private EnvioDAO envioDAO;
+
+        public UDPWorker(BlockingQueue<DatagramPacket> queue, DatagramSocket socket, String name) {
+            super(name);
+            this.queue = queue;
+            this.socket = socket;
+            this.envioDAO = new EnvioDAO();
+        }
+
+        @Override
+        public void run() {
+            JSONParser parser = new JSONParser();
+            while (true) {
+                try {
+                    DatagramPacket packet = queue.take();
+                    String datoRecibido = new String(packet.getData(), 0, packet.getLength());
+
+                    JSONObject jsonIn = (JSONObject) parser.parse(datoRecibido);
+                    Long idEnvio = (Long) jsonIn.get("idEnvio");
+
+                    System.out.println("\n[" + getName()
+                            + "] [BUSQUEDA] Peticion UDP: Consultando BD para Tracking ID: " + idEnvio);
+                    Envio envio = envioDAO.buscarPorId(idEnvio.intValue());
+                    String respuestaStr;
+
+                    if (envio != null) {
+                        System.out.println(
+                                "[" + getName() + "] [OK] Paquete encontrado. Estado actual: " + envio.getEstado());
+                        respuestaStr = EnvioJSON.objetoString(envio);
+                    } else {
+                        System.out.println("[" + getName() + "] [ERROR] Paquete NO encontrado en la BD.");
+                        respuestaStr = "{\"error\": \"Envio no encontrado\"}";
+                    }
+
+                    byte[] sendData = respuestaStr.getBytes();
+                    DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, packet.getAddress(),
+                            packet.getPort());
+                    socket.send(sendPacket);
+
+                } catch (Exception e) {
+                    System.err.println("Error en UDP Worker: " + e.getMessage());
+                }
+            }
+        }
+    }
+
     public static void main(String[] args) {
         int puerto = 9876;
+        BlockingQueue<DatagramPacket> queue = new BlockingQueue<>(100);
 
-        // El try-with-resources garantiza que serverSocket.close() se llame
-        // automáticamente
         try (DatagramSocket serverSocket = new DatagramSocket(puerto)) {
-            System.out.println("Servidor UDP GlobalTrack escuchando en el puerto " + puerto + "...");
+            System.out.println("Servidor UDP Concurrente Global Express en puerto " + puerto + "...");
 
-            // Instanciamos el DAO para consultar la base de datos local de Global Express
-            EnvioDAO envioDao = new EnvioDAO();
+            for (int i = 1; i <= 3; i++) {
+                new UDPWorker(queue, serverSocket, "Hilo-UDP-" + i).start();
+            }
 
+            byte[] receiveData = new byte[1024];
             while (true) {
-                byte[] receiveData = new byte[1024];
-
-                // 1. Recibir la petición
                 DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 serverSocket.receive(receivePacket);
 
-                String datoRecibido = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                System.out.println("\n[GlobalTrack] Consulta recibida: " + datoRecibido);
+                byte[] dataCopy = new byte[receivePacket.getLength()];
+                System.arraycopy(receivePacket.getData(), receivePacket.getOffset(), dataCopy, 0,
+                        receivePacket.getLength());
+                DatagramPacket queuedPacket = new DatagramPacket(dataCopy, dataCopy.length, receivePacket.getAddress(),
+                        receivePacket.getPort());
 
-                try {
-                    // 2. Convertir el JSON entrante
-                    Envio peticion = EnvioJSON.stringObjeto(datoRecibido);
-
-                    // 3. Buscar en la BD
-                    Envio envioBD = envioDao.buscarPorId(peticion.getIdEnvio());
-
-                    String respuestaJSON;
-                    if (envioBD != null) {
-                        respuestaJSON = EnvioJSON.objetoString(envioBD);
-                        System.out.println("[GlobalTrack] Envío encontrado. Estado: " + envioBD.getEstado());
-                    } else {
-                        peticion.setEstado("NO_ENCONTRADO");
-                        respuestaJSON = EnvioJSON.objetoString(peticion);
-                        System.out.println("[GlobalTrack] Envío " + peticion.getIdEnvio() + " no encontrado.");
-                    }
-
-                    // 4. Enviar la respuesta
-                    byte[] sendData = respuestaJSON.getBytes();
-                    InetAddress ipOrigen = receivePacket.getAddress();
-                    int puertoOrigen = receivePacket.getPort();
-
-                    DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipOrigen, puertoOrigen);
-                    serverSocket.send(sendPacket);
-
-                    System.out.println("[GlobalTrack] Respuesta enviada.");
-
-                } catch (Exception e) {
-                    System.err.println("Error procesando el JSON interno: " + e.getMessage());
-                }
+                queue.put(queuedPacket);
             }
-        } catch (Exception ex) {
-            System.err.println("Error crítico en el puerto " + puerto + ": " + ex.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

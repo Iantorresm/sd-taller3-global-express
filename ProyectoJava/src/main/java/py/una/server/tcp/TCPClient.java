@@ -4,53 +4,63 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.Scanner;
 import org.json.simple.JSONObject;
-
-import py.una.bd.EnvioDAO;
+import py.una.bd.Bd;
 
 public class TCPClient {
-    @SuppressWarnings("unchecked")
     public static void main(String[] args) {
         String ipServidor = "localhost";
         int puertoServidor = 4445;
+        Scanner scanner = new Scanner(System.in);
 
-        // Simulando un cambio de estado en la logística
-        int idPedidoAsociado = 101;
-        String nuevoEstado = "ENTREGADO";
+        System.out.println("=== SISTEMA LOGISTICO: NOTIFICACION DE ENTREGA ===");
+        System.out.print("Ingrese el ID del Pedido (de la optica) que fue entregado: ");
+        int idPedido = scanner.nextInt();
 
-        JSONObject jsonActualizacion = new JSONObject();
-        jsonActualizacion.put("idPedido", idPedidoAsociado);
-        jsonActualizacion.put("estado", nuevoEstado);
+        // 1. CHEQUEO Y ACTUALIZACION EN LA BASE DE DATOS LOCAL DE GLOBAL EXPRESS
+        try (Connection conn = Bd.connect();
+                PreparedStatement ps = conn
+                        .prepareStatement("UPDATE envio SET estado = 'ENTREGADO' WHERE id_pedido = ?")) {
+            ps.setInt(1, idPedido);
+            int affectedRows = ps.executeUpdate();
 
-        String payload = jsonActualizacion.toJSONString();
+            if (affectedRows == 0) {
+                System.out.println("[ERROR] No existe el ID de Pedido " + idPedido
+                        + " en la base de datos de logistica. Abortando notificacion.");
+                scanner.close();
+                return;
+            }
+            System.out.println("[BD] El paquete cambio a ENTREGADO en la BD de Logistica de forma persistente.");
+        } catch (Exception e) {
+            System.err.println("Error de base de datos: " + e.getMessage());
+            scanner.close();
+            return;
+        }
+
+        // 2. ENVIAR NOTIFICACION TCP A LA OPTICA
+        JSONObject jsonNotificacion = new JSONObject();
+        jsonNotificacion.put("idPedido", idPedido);
+        jsonNotificacion.put("estado", "ENTREGADO");
+
+        String payload = jsonNotificacion.toJSONString();
 
         try (Socket socket = new Socket(ipServidor, puertoServidor);
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            System.out.println("[Global Express] Notificando cambio de estado a Prolens: " + payload);
-
-            // 1. Enviar JSON al servidor de Prolens
+            System.out.println("Notificando a Prolens via TCP...");
             out.println(payload);
 
-            // 2. Leer la confirmación
             String respuesta = in.readLine();
-            System.out.println("[Global Express] Respuesta de Prolens: " + respuesta);
-
-            EnvioDAO envioDao = new EnvioDAO();
-            envioDao.actualizarEstado(idPedidoAsociado, nuevoEstado);
-            // 3. Leer la confirmación de Prolens
-            System.out.println("[Global Express] Respuesta de Prolens: " + respuesta);
-
-            // 4. Actualizar la base de datos local de Global Express
-            EnvioDAO envioDAO = new EnvioDAO();
-            int idEnvioActualizado = 1; // El ID interno del envío que acabas de entregar
-            envioDAO.actualizarEstado(idEnvioActualizado, nuevoEstado);
-            System.out.println("[Global Express] Estado actualizado en BD local a: " + nuevoEstado);
+            System.out.println("Respuesta de la optica: " + respuesta);
 
         } catch (Exception e) {
-            System.err.println("Error en el cliente TCP de logística: " + e.getMessage());
+            System.err.println("Error de conexion con la optica: " + e.getMessage());
+        } finally {
+            scanner.close();
         }
-        
     }
 }
